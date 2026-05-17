@@ -1,23 +1,31 @@
 # AgnosticLookup
 
-A RAG (Retrieval-Augmented Generation) app that compares football players, movies, and musicians using Wikipedia as a knowledge base.
+A RAG (Retrieval-Augmented Generation) app with an agentic layer that compares football players, movies, and musicians using Wikipedia as a knowledge base.
 
-## How it works
+## Architecture
+
+**Three interfaces:**
+1. **REST API** — `/compare` endpoint for direct comparisons
+2. **CLI Agent** — Multi-turn interactive agent with tool use
+3. **Core RAG** — Embedding + retrieval + generation pipeline
+
+**How it works:**
 
 ```
 INGEST (run once)
-  Wikipedia article → Mistral embed → Pinecone vector store
+  Wikipedia article → Mistral embed → ChromaDB (local vector store)
 
-QUERY (each API call)
-  user query → Mistral embed → Pinecone search → build prompt → Mistral LLM → comparison
+AGENT/API (each query)
+  user query → Agent reasoning → Tool selection (compare/retrieve/list_domains)
+  → Mistral embed → ChromaDB search → Mistral LLM → comparison response
 ```
 
-Mistral is used twice: once for **embedding** (finding relevant context) and once for **generation** (writing the comparison).
+Mistral is used twice: **embedding** (finding relevant context) and **generation** (writing the comparison).
 
 ## Stack
 
-- **[Mistral](https://mistral.ai)** — embeddings (`mistral-embed`) + generation (`mistral-small`)
-- **[Pinecone](https://pinecone.io)** — vector store
+- **[Mistral](https://mistral.ai)** — embeddings (`mistral-embed`) + generation (`mistral-small-latest`)
+- **[ChromaDB](https://www.trychroma.com/)** — local vector store (no setup required)
 - **[FastAPI](https://fastapi.tiangolo.com)** — REST API
 - **Wikipedia** — knowledge source
 
@@ -40,33 +48,51 @@ cp .env.example .env
 Fill in your keys in `.env`:
 
 ```
-PINECONE_API_KEY=your_pinecone_api_key
-PINECONE_INDEX=agnostic-lookup
 MISTRAL_API_KEY=your_mistral_api_key
 MISTRAL_MODEL=mistral-small-latest
+VECTOR_STORE=chroma
 ```
+
+> Note: `VECTOR_STORE=chroma` uses local ChromaDB (no API keys needed). Set to `pinecone` to use cloud Pinecone instead.
 
 ### 3. Ingest data
 
-Fetches Wikipedia articles for all subjects and stores them in Pinecone. Run once.
+Fetches Wikipedia articles for all subjects and stores them locally in ChromaDB. Run once.
 
 ```bash
 python3 ingest.py
 ```
 
-### 4. Start the API
+### 4. Run the agent (interactive CLI)
+
+Multi-turn agent that can reason about comparisons, retrieve specific topics, and list domains.
+
+```bash
+python3 agent.py
+```
+
+Example:
+```
+You: Compare Messi and Ronaldo
+Agent: [fetches context, generates detailed comparison]
+
+You: Tell me more about Messi's achievements
+Agent: [retrieves from knowledge base]
+```
+
+### 5. Or start the REST API
 
 ```bash
 python3 -m uvicorn api:app --reload
 ```
 
-API is available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
+API available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
 
-## API
+## REST API Endpoints
 
 ### `POST /compare`
 
-Compare two subjects.
+Compare two subjects using RAG.
 
 **Request:**
 ```json
@@ -97,7 +123,17 @@ List available domains.
 
 Health check.
 
-## Subjects
+## Agent Tools
+
+The agent (`agent.py`) has access to three tools:
+
+- **`compare(subject_a, subject_b, domain?)`** — Deep comparison using RAG
+- **`retrieve(query, domain?)`** — Fetch knowledge base context for a topic
+- **`list_domains()`** — Show available domains
+
+The agent uses multi-turn reasoning to answer complex questions.
+
+## Knowledge Base
 
 | Domain | Subjects |
 |--------|----------|
@@ -105,4 +141,6 @@ Health check.
 | movies | The Godfather, Inception, Pulp Fiction, The Dark Knight, Interstellar |
 | music | Michael Jackson, The Beatles, Bob Dylan, Beyoncé, David Bowie |
 
-To add more, edit `subjects.py` and re-run `ingest.py`.
+To add more subjects:
+1. Edit `subjects.py`
+2. Re-run `python3 ingest.py`
