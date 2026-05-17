@@ -21,10 +21,38 @@ def upsert(id: str, vector: list[float], metadata: dict):
     )
 
 
-def retrieve(vector: list[float], domain: str | None = None, top_k: int = 4) -> list[dict]:
+def retrieve(vector: list[float], domain: str | None = None, top_k: int = 4, similarity_threshold: float | None = None) -> list[dict]:
+    """
+    Retrieve similar documents from ChromaDB.
+
+    Args:
+        vector: Query embedding vector
+        domain: Optional domain filter
+        top_k: Max results to return
+        similarity_threshold: Optional minimum similarity (0-1). Results below this are filtered out.
+                             None = no filtering (return all top_k)
+
+    Returns:
+        List of dicts with "name", "text", and "similarity" keys.
+    """
     where = {"domain": domain} if domain else None
     results = _get_collection().query(query_embeddings=[vector], n_results=top_k, where=where)
-    return [
-        {"name": meta["name"], "text": meta["text"]}
-        for meta in results["metadatas"][0]
-    ]
+
+    documents = []
+    distances = results.get("distances", [[]])[0]  # ChromaDB returns distances (lower = more similar)
+
+    for i, meta in enumerate(results["metadatas"][0]):
+        distance = distances[i] if i < len(distances) else 1.0
+        similarity = 1 - distance  # Convert distance to similarity (0-1, higher = better)
+
+        # Apply threshold filter
+        if similarity_threshold is not None and similarity < similarity_threshold:
+            continue
+
+        documents.append({
+            "name": meta["name"],
+            "text": meta["text"],
+            "similarity": similarity
+        })
+
+    return documents

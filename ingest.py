@@ -4,6 +4,7 @@ Uses Mistral embeddings — no PyTorch required.
 """
 
 import os
+import time
 import unicodedata
 import wikipedia
 from mistralai.client import Mistral
@@ -20,13 +21,47 @@ def to_ascii_id(text: str) -> str:
     return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
 
 
-def get_wikipedia_text(title: str) -> str:
+def chunk_text(text: str, chunk_size: int = 500, overlap: int = 100) -> list[str]:
+    """
+    Split text into overlapping chunks.
+
+    Args:
+        text: Full text to chunk
+        chunk_size: Characters per chunk (default 500)
+        overlap: Characters to overlap between chunks (default 100)
+
+    Returns:
+        List of text chunks
+
+    Example:
+        text = "ABCDEFGH..." (8 chars)
+        chunk_size = 3, overlap = 1
+        Returns: ["ABC", "BCD", "CDE", "DEF", "EFG", "FGH"]
+    """
+    chunks = []
+    start = 0
+
+    while start < len(text):
+        end = start + chunk_size
+        chunk = text[start:end]
+        chunks.append(chunk)
+        start = end - overlap  # Move back by overlap amount
+
+    return chunks
+
+
+def get_wikipedia_text(title: str) -> list[str]:
+    """
+    Fetch Wikipedia article and split into chunks.
+    Returns list of text chunks instead of one big string.
+    """
     try:
         page = wikipedia.page(title, auto_suggest=False)
-        return page.content[:5000]
+        content = page.content[:5000]
+        return chunk_text(content, chunk_size=500, overlap=100)
     except Exception as e:
         print(f"  [WARN] Could not fetch '{title}': {e}")
-        return ""
+        return []
 
 
 def embed(client: Mistral, text: str) -> list[float]:
@@ -68,16 +103,22 @@ def main():
         print(f"\nIngesting domain: {domain}")
         for item in items:
             print(f"  Fetching: {item}")
-            text = get_wikipedia_text(item)
-            if not text:
+            chunks = get_wikipedia_text(item)
+            if not chunks:
                 continue
-            vector = embed(mistral, text)
-            upsert(
-                id=f"{domain}::{to_ascii_id(item)}",
-                vector=vector,
-                metadata={"domain": domain, "name": item, "text": text},
-            )
-            print(f"  Upserted: {item}")
+
+            # Store each chunk separately with a unique ID
+            for chunk_idx, chunk_text in enumerate(chunks):
+                vector = embed(mistral, chunk_text)
+                chunk_id = f"{domain}::{to_ascii_id(item)}::chunk_{chunk_idx}"
+                upsert(
+                    id=chunk_id,
+                    vector=vector,
+                    metadata={"domain": domain, "name": item, "text": chunk_text},
+                )
+                time.sleep(2)  # Delay to avoid rate limiting (0.5 req/sec)
+
+            print(f"  Upserted: {item} ({len(chunks)} chunks)")
 
     print("\nIngestion complete.")
 

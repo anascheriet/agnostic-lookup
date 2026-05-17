@@ -32,11 +32,23 @@ def _get_store():
     return retrieve
 
 
-def retrieve(query: str, domain: str | None = None, top_k: int = TOP_K) -> list[dict]:
+def retrieve(query: str, domain: str | None = None, top_k: int = TOP_K, similarity_threshold: float | None = None) -> list[dict]:
     client = _get_mistral()
     response = client.embeddings.create(model=EMBED_MODEL, inputs=[query])
     vector = response.data[0].embedding
-    return _get_store()(vector, domain=domain, top_k=top_k)
+
+    # Get raw results (may include multiple chunks from same subject)
+    raw_results = _get_store()(vector, domain=domain, top_k=top_k * 2, similarity_threshold=similarity_threshold)
+
+    # Deduplicate by subject name, keeping highest-similarity chunk per subject
+    seen = {}
+    for result in raw_results:
+        name = result["name"]
+        if name not in seen:
+            seen[name] = result
+
+    # Return top_k unique subjects
+    return list(seen.values())[:top_k]
 
 
 def compare(subject_a: str, subject_b: str, domain: str | None = None) -> str:

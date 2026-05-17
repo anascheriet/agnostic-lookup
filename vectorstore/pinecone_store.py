@@ -16,7 +16,22 @@ def upsert(id: str, vector: list[float], metadata: dict):
     _get_index().upsert(vectors=[{"id": id, "values": vector, "metadata": metadata}])
 
 
-def retrieve(vector: list[float], domain: str | None = None, top_k: int = 4) -> list[dict]:
+def retrieve(vector: list[float], domain: str | None = None, top_k: int = 4, similarity_threshold: float | None = None) -> list[dict]:
     filter_ = {"domain": {"$eq": domain}} if domain else None
     results = _get_index().query(vector=vector, top_k=top_k, include_metadata=True, filter=filter_)
-    return [{"name": m.metadata["name"], "text": m.metadata["text"]} for m in results.matches]
+
+    documents = []
+    for match in results.matches:
+        similarity = match.score  # Pinecone score is already 0-1
+
+        # Apply threshold filter
+        if similarity_threshold is not None and similarity < similarity_threshold:
+            continue
+
+        documents.append({
+            "name": match.metadata["name"],
+            "text": match.metadata["text"],
+            "similarity": similarity
+        })
+
+    return documents
