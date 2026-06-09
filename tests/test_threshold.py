@@ -29,8 +29,8 @@ def test_thresholds():
     print(f"Test: {test_case['description']}")
     print(f"Query: {query}\n")
 
-    # Get raw results with similarity scores
-    raw_results = retrieve(query, domain=domain, top_k=10)  # Get more results to see scores
+    # Get raw results with very low threshold to see all options
+    raw_results = retrieve(query, domain=domain, similarity_threshold=0.3)
 
     print("All results with similarity scores:")
     for i, result in enumerate(raw_results, 1):
@@ -46,7 +46,7 @@ def test_thresholds():
     print("="*80 + "\n")
 
     for threshold in thresholds:
-        filtered = retrieve(query, domain=domain, top_k=10, similarity_threshold=threshold)
+        filtered = retrieve(query, domain=domain, similarity_threshold=threshold)
         filtered_names = [r["name"] for r in filtered]
 
         precision = precision_at_k(filtered_names, expected, k=len(filtered_names))

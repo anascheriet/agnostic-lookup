@@ -35,31 +35,33 @@ def test_retrieval():
         print(f"  Expected subjects: {expected}\n")
 
         # Run retrieval (this is the core RAG step)
-        matches = retrieve(query, domain=domain, top_k=4)
+        matches = retrieve(query, domain=domain)
         retrieved_names = [m["name"] for m in matches]
 
-        print(f"  Retrieved (top 4):")
+        print(f"  Retrieved ({len(matches)} results above threshold):")
         for j, match in enumerate(matches, 1):
             marker = "✓" if match["name"] in expected else "✗"
-            print(f"    {j}. {marker} {match['name']}")
+            similarity = match.get("similarity", 0)
+            print(f"    {j}. {marker} {match['name']} (similarity: {similarity:.3f})")
 
-        # Calculate metrics
-        p_at_4 = precision_at_k(retrieved_names, expected, k=4)
-        r_at_4 = recall_at_k(retrieved_names, expected, k=4)
+        # Calculate metrics (use actual result count as k)
+        k = len(matches) if matches else 1
+        p_at_k = precision_at_k(retrieved_names, expected, k=k)
+        r_at_k = recall_at_k(retrieved_names, expected, k=k)
         m_rr = mrr(retrieved_names, expected)
-        f1 = f1_score(p_at_4, r_at_4)
+        f1 = f1_score(p_at_k, r_at_k)
 
-        print(f"\n  Metrics:")
-        print(f"    Precision@4: {p_at_4:.2f}")
-        print(f"    Recall@4:    {r_at_4:.2f}")
-        print(f"    MRR:         {m_rr:.2f}")
-        print(f"    F1 Score:    {f1:.2f}")
+        print(f"\n  Metrics (based on {k} results):")
+        print(f"    Precision: {p_at_k:.0%}")
+        print(f"    Recall:    {r_at_k:.0%}")
+        print(f"    MRR:       {m_rr:.2f}")
+        print(f"    F1 Score:  {f1:.2f}")
         print()
 
         results.append({
             "test": test_case["description"],
-            "precision": p_at_4,
-            "recall": r_at_4,
+            "precision": p_at_k,
+            "recall": r_at_k,
             "mrr": m_rr,
             "f1": f1,
         })
@@ -74,15 +76,15 @@ def test_retrieval():
     avg_mrr = sum(r["mrr"] for r in results) / len(results)
     avg_f1 = sum(r["f1"] for r in results) / len(results)
 
-    print(f"Average Precision@4: {avg_precision:.2f}")
-    print(f"Average Recall@4:    {avg_recall:.2f}")
-    print(f"Average MRR:         {avg_mrr:.2f}")
-    print(f"Average F1 Score:    {avg_f1:.2f}")
+    print(f"Average Precision: {avg_precision:.0%}")
+    print(f"Average Recall:    {avg_recall:.0%}")
+    print(f"Average MRR:       {avg_mrr:.2f}")
+    print(f"Average F1 Score:  {avg_f1:.2f}")
     print()
 
     # Interpretation
     print("Interpretation:")
-    print(f"  Precision {avg_precision:.0%}: Of results returned, {avg_precision:.0%} were relevant")
+    print(f"  Precision {avg_precision:.0%}: Of results returned, {avg_precision:.0%} were relevant (threshold-filtered)")
     print(f"  Recall {avg_recall:.0%}: Of all relevant docs, we found {avg_recall:.0%}")
     print()
 
