@@ -13,6 +13,7 @@ MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-small-latest")
 EMBED_MODEL = "mistral-embed"
 SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.35"))
 MAX_RESULTS = int(os.getenv("MAX_RESULTS", "10"))
+USE_RERANKING = os.getenv("USE_RERANKING", "true").lower() == "true"
 
 _mistral_client = None
 
@@ -33,17 +34,70 @@ def _get_store():
     return retrieve
 
 
-def retrieve(query: str, domain: str | None = None, similarity_threshold: float | None = None) -> list[dict]:
+def rerank(query: str, results: list[dict]) -> list[dict]:
     """
-    Retrieve relevant chunks using quality-based filtering (threshold) instead of quantity cap.
+    Use LLM to rerank results by semantic relevance to query.
+
+    Args:
+        query: Original search query
+        results: List of retrieved chunks with text and name
+
+    Returns:
+        Results re-ranked by relevance (best match first)
+    """
+    if not results or len(results) <= 1:
+        return results
+
+    # Build candidate list for LLM to judge
+    candidates_text = "\n\n".join(
+        f"[{i+1}] {result['name']}: {result['text'][:200]}..."
+        for i, result in enumerate(results)
+    )
+
+    prompt = (
+        f"Rank these results by relevance to the query. Return ONLY the numbers in order, "
+        f"highest relevance first (e.g., '2 1 3').\n\n"
+        f"Query: {query}\n\n"
+        f"Results:\n{candidates_text}"
+    )
+
+    client = _get_mistral()
+    response = client.chat.complete(
+        model=MISTRAL_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    # Parse ranking from response
+    try:
+        ranking = response.choices[0].message.content.strip().split()
+        ranking_indices = [int(x) - 1 for x in ranking if x.isdigit()]
+
+        # Reorder results based on ranking
+        reranked = [results[i] for i in ranking_indices if i < len(results)]
+
+        # Add any missing results that weren't ranked
+        ranked_set = set(ranking_indices)
+        for i, result in enumerate(results):
+            if i not in ranked_set:
+                reranked.append(result)
+
+        return reranked
+    except (ValueError, IndexError):
+        return results
+
+
+def retrieve(query: str, domain: str | None = None, similarity_threshold: float | None = None, use_reranking: bool | None = None) -> list[dict]:
+    """
+    Retrieve relevant chunks: similarity filter → dedup → optional reranking.
 
     Args:
         query: Search query
         domain: Optional domain filter
         similarity_threshold: Minimum similarity to include result (default: SIMILARITY_THRESHOLD)
+        use_reranking: Use LLM to rerank by relevance (default: USE_RERANKING)
 
     Returns:
-        List of chunks with similarity ≥ threshold, deduplicated by subject
+        List of chunks, optionally reranked by semantic relevance
     """
     client = _get_mistral()
     response = client.embeddings.create(model=EMBED_MODEL, inputs=[query])
@@ -62,8 +116,16 @@ def retrieve(query: str, domain: str | None = None, similarity_threshold: float 
         if name not in seen:
             seen[name] = result
 
-    # Return all results that pass threshold (no quantity cap)
-    return list(seen.values())
+    results = list(seen.values())
+
+    # Optionally rerank by semantic relevance
+    if use_reranking is None:
+        use_reranking = USE_RERANKING
+
+    if use_reranking and results:
+        results = rerank(query, results)
+
+    return results
 
 
 def compare(subject_a: str, subject_b: str, domain: str | None = None) -> str:

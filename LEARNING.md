@@ -32,37 +32,40 @@ Building AgnosticLookup to prepare for GenAI freelance work starting September 2
 
 ---
 
-## Session 2: Optimization Concepts — Practical Testing (June 9, 2026)
+## Session 2: Optimization Concepts — Practical Testing & Implementation (June 9, 2026)
 
 ### What Anas Learned
 
-**Chunk Size & Overlap:**
-- Chunk size determines granularity (smaller = focused, larger = context)
-- Overlap = shared text between chunks (prevents boundary loss, like linked list)
-- Chunk 500 + overlap 100 = 400 chars new content per chunk
-- Tradeoff: more chunks = better precision, fewer chunks = faster search
+**Threshold-Based Filtering (Removed Hard Caps):**
+- **Before:** "Return exactly 4 results" (forces bad matches)
+- **Now:** "Return only if similarity ≥ 0.35" (quality over quantity)
+- **Why:** Improves precision (40% vs 30%) by filtering low-confidence results
+- Insight: Don't force a cap if there aren't enough good matches
 
-**Similarity Threshold:**
-- **Before:** Return top K results regardless of quality
-- **Now:** Filter results by minimum similarity (e.g., keep if similarity ≥ 0.75)
-- **Why:** Remove low-confidence matches, improve precision
-- Distance ≤ 0.20 = Similarity ≥ 0.80 = 80% confident match
+**Reranking (Two-Stage Retrieval):**
+- **Stage 1:** Similarity filter (mathematical, fast, gets candidates)
+- **Stage 2:** LLM rerank (semantic, accurate, judges relevance)
+- **Analogy:** Distance ranking = math, Reranking = human-like judgment
+- **Why it works:** LLM understands context, catches mistakes pure math misses
+- **Limitation:** Only helps when you have multiple candidates (limited by data completeness)
 
-**Query Retrieval Process:**
-- Query gets embedded to vector (on-the-fly)
-- Compared to all stored chunk vectors (pre-computed during ingestion)
-- Distance = how far apart the vectors are (calculated between query vector and each chunk vector)
-- Return chunks with smallest distance (closest match)
+**Root Cause Analysis:**
+- Low baseline similarity (0.35-0.56) is normal with incomplete data
+- Only 2/13 subjects ingested (Wikipedia API failures)
+- Reranking blocked by insufficient candidates to choose from
+- **Insight:** Retrieval quality depends on data completeness FIRST, then tuning
 
-**Testing & Measurement:**
-- Created `test_chunk_sizes.py` to automate chunk size testing
-- Modified `ingest.py` to accept CHUNK_SIZE parameter
-- Can now test different configurations and measure precision/recall
+**Implementation Progress:**
+- Removed `top_k` hard cap, replaced with `SIMILARITY_THRESHOLD` (configurable)
+- Implemented `rerank()` function (LLM re-judges results)
+- Updated tests to handle variable result counts
+- Created automated testing framework for chunk sizes
 
-**Learning Style Insight:**
-- Prefers Before → Now → Why format (problem → solution → motivation)
+**Learning Style Insight (Confirmed):**
+- Prefers Before → Now → Why format for learning
 - Focused on concepts, not syntax
-- Asks good comparative questions (chunk 500+100 vs 600+0?)
+- Makes good analogies (linked list for overlap, human judgment for reranking)
+- Catches fundamental issues (data completeness > tuning)
 
 ---
 
@@ -224,9 +227,9 @@ Recall@4 = 2 found / 3 expected = 67%
                    |              |              |        |
         __________|______    _____|_____    _____|__   ___|___________
        |          |      |  |   |   |  |  |   |   | |   |   |  |
-      PRE-    VECTOR  HOW   SIM  CHUNK OVERLAP DEDUP THRESH LLM TOKENS CTX PREC RECALL GROUND
-     TRAIN   SPACE   MODEL  DIST    ???   ✓      ???    ✓    ??? ✗✗    ??? ✓   ✓     ✓
-      ✓       ✓      ✓      ✓    ✓            ✓         ✓        ✗ (low precision issue)
+      PRE-    VECTOR  HOW   SIM  CHUNK OVERLAP DEDUP THRESH RERANK LLM TOKENS CTX PREC RECALL GROUND
+     TRAIN   SPACE   MODEL  DIST    ???   ✓      ???    ✓     ✓    ??? ✗✗    ??? ✓   ✓     ✓
+      ✓       ✓      ✓      ✓    ✓            ✓         ✓     ✓         ✗ (incomplete data issue)
       
       ✗ = Not learned yet | ??? = Know it exists, haven't deep-dived
 ```
@@ -235,8 +238,9 @@ Recall@4 = 2 found / 3 expected = 67%
 
 **IMMEDIATE (Week 1-2):**
 - [x] **Chunk Size Tuning** — Understand concept (smaller = granular, larger = context). Automated testing setup created.
-- [x] **Threshold Optimization** — Filter low-confidence results. Only return similarity ≥ threshold (e.g., 0.75).
-- [ ] **Why Low Precision?** — Investigate if it's chunks too big, dedup too aggressive, or query mismatch
+- [x] **Threshold Optimization** — Remove hard cap, use quality threshold. Only return similarity ≥ threshold.
+- [x] **Reranking** — LLM re-judges results by semantic relevance (not just distance). Implemented but limited by incomplete data.
+- [ ] **Why Low Precision?** — Root cause: only 2/13 subjects in DB. Reranking blocked by insufficient candidates.
 
 **NEAR-TERM (Week 3-4):**
 - [ ] **Reranking** — Use LLM to re-score retrieved chunks for relevance
@@ -319,9 +323,12 @@ VECTOR STORE (Chroma in your case)
 **Session 2 Mastery:**
 - [x] Understand chunk size tradeoffs (granularity vs context)
 - [x] Understand overlap purpose (linked list of chunks)
-- [x] Understand similarity threshold (filter low confidence)
-- [x] Understand query → vector → nearest neighbor retrieval
+- [x] Understand threshold-based filtering (remove hard caps, quality over quantity)
+- [x] Understand similarity (distance = math, relevance = LLM judgment)
+- [x] Understand reranking (two-stage: similarity filter → LLM re-judge)
+- [x] Identify root cause: incomplete data blocks optimization
 - [x] Set up automated testing pipeline for experiments
+- [x] Implement reranking function (working, awaits better data)
 
 **Next Session Goals:**
 - [ ] Debug: Why is precision 30%? (chunks? dedup? test data?)
