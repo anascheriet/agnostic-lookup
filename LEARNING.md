@@ -32,6 +32,40 @@ Building AgnosticLookup to prepare for GenAI freelance work starting September 2
 
 ---
 
+## Session 2: Optimization Concepts — Practical Testing (June 9, 2026)
+
+### What Anas Learned
+
+**Chunk Size & Overlap:**
+- Chunk size determines granularity (smaller = focused, larger = context)
+- Overlap = shared text between chunks (prevents boundary loss, like linked list)
+- Chunk 500 + overlap 100 = 400 chars new content per chunk
+- Tradeoff: more chunks = better precision, fewer chunks = faster search
+
+**Similarity Threshold:**
+- **Before:** Return top K results regardless of quality
+- **Now:** Filter results by minimum similarity (e.g., keep if similarity ≥ 0.75)
+- **Why:** Remove low-confidence matches, improve precision
+- Distance ≤ 0.20 = Similarity ≥ 0.80 = 80% confident match
+
+**Query Retrieval Process:**
+- Query gets embedded to vector (on-the-fly)
+- Compared to all stored chunk vectors (pre-computed during ingestion)
+- Distance = how far apart the vectors are (calculated between query vector and each chunk vector)
+- Return chunks with smallest distance (closest match)
+
+**Testing & Measurement:**
+- Created `test_chunk_sizes.py` to automate chunk size testing
+- Modified `ingest.py` to accept CHUNK_SIZE parameter
+- Can now test different configurations and measure precision/recall
+
+**Learning Style Insight:**
+- Prefers Before → Now → Why format (problem → solution → motivation)
+- Focused on concepts, not syntax
+- Asks good comparative questions (chunk 500+100 vs 600+0?)
+
+---
+
 ## Session 1: Core Concepts — Anas's First Deep Dive (May 17, 2026)
 
 ### Your Questions & Answers
@@ -190,9 +224,9 @@ Recall@4 = 2 found / 3 expected = 67%
                    |              |              |        |
         __________|______    _____|_____    _____|__   ___|___________
        |          |      |  |   |   |  |  |   |   | |   |   |  |
-      PRE-    VECTOR  HOW   SIM  CHUNK DEDUP LLM TOKENS CTX PREC RECALL GROUND
-     TRAIN   SPACE   MODEL  DIST    ???   ???  ??? ✗✗    ??? ✓   ✓     ✓
-      ✓       ✓      ✓      ✓    ✓      ✓    ✓   ✗ (low precision issue)
+      PRE-    VECTOR  HOW   SIM  CHUNK OVERLAP DEDUP THRESH LLM TOKENS CTX PREC RECALL GROUND
+     TRAIN   SPACE   MODEL  DIST    ???   ✓      ???    ✓    ??? ✗✗    ??? ✓   ✓     ✓
+      ✓       ✓      ✓      ✓    ✓            ✓         ✓        ✗ (low precision issue)
       
       ✗ = Not learned yet | ??? = Know it exists, haven't deep-dived
 ```
@@ -200,8 +234,8 @@ Recall@4 = 2 found / 3 expected = 67%
 ### Branches to Explore (in order)
 
 **IMMEDIATE (Week 1-2):**
-- [ ] **Chunk Size Tuning** — Test 300, 500, 1000 char chunks. See which improves precision.
-- [ ] **Threshold Optimization** — Find best similarity_threshold (0.5-0.8 range)
+- [x] **Chunk Size Tuning** — Understand concept (smaller = granular, larger = context). Automated testing setup created.
+- [x] **Threshold Optimization** — Filter low-confidence results. Only return similarity ≥ threshold (e.g., 0.75).
 - [ ] **Why Low Precision?** — Investigate if it's chunks too big, dedup too aggressive, or query mismatch
 
 **NEAR-TERM (Week 3-4):**
@@ -282,8 +316,16 @@ VECTOR STORE (Chroma in your case)
 - [x] Understand precision vs recall in evaluation
 - [x] **Critical thinking:** Question ground truth methodology ⭐
 
+**Session 2 Mastery:**
+- [x] Understand chunk size tradeoffs (granularity vs context)
+- [x] Understand overlap purpose (linked list of chunks)
+- [x] Understand similarity threshold (filter low confidence)
+- [x] Understand query → vector → nearest neighbor retrieval
+- [x] Set up automated testing pipeline for experiments
+
 **Next Session Goals:**
-- [ ] Improve precision (30% → 60%+) through experimentation
-- [ ] Understand reranking and how to apply it
-- [ ] Optimize for cost and latency
+- [ ] Debug: Why is precision 30%? (chunks? dedup? test data?)
+- [ ] Implement & test: Similarity threshold tuning
+- [ ] Understand & implement: Reranking with LLM
+- [ ] Improve precision (30% → 60%+) through optimization
 - [ ] Build second RAG project from scratch

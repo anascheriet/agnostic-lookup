@@ -15,6 +15,8 @@ load_dotenv()
 
 MISTRAL_API_KEY = os.environ["MISTRAL_API_KEY"]
 EMBED_MODEL = "mistral-embed"
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "500"))
+CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))
 
 
 def to_ascii_id(text: str) -> str:
@@ -58,7 +60,7 @@ def get_wikipedia_text(title: str) -> list[str]:
     try:
         page = wikipedia.page(title, auto_suggest=False)
         content = page.content[:5000]
-        return chunk_text(content, chunk_size=500, overlap=100)
+        return chunk_text(content, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP)
     except Exception as e:
         print(f"  [WARN] Could not fetch '{title}': {e}")
         return []
